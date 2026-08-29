@@ -1,10 +1,9 @@
 {
-  "name": "roblox_project_template",
-  "placeId": 91045933836846,
-  "gameId": 10596427617,
+  "name": "rain",
+  "placeId": 79356340322631,
+  "gameId": 10762145525,
   "servePlaceIds": [
-    91045933836846,
-    101736951773632
+    79356340322631
   ],
   "tree": {
     "$className": "DataModel",

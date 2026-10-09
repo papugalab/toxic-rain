@@ -6,6 +6,8 @@
 
 Основной дизайн и ограничения проекта описаны в
 [`TOXIC RAIN — GDD И ТЕХНИЧЕСКИЕ ПРАВИЛА ПРОЕКТА.md`](TOXIC%20RAIN%20%E2%80%94%20GDD%20%D0%98%20%D0%A2%D0%95%D0%A5%D0%9D%D0%98%D0%A7%D0%95%D0%A1%D0%9A%D0%98%D0%95%20%D0%9F%D0%A0%D0%90%D0%92%D0%98%D0%9B%D0%90%20%D0%9F%D0%A0%D0%9E%D0%95%D0%9A%D0%A2%D0%90.md).
+Фактическое состояние сцены и результаты последней проверки записаны в
+[`docs/PrototypeStatus.md`](docs/PrototypeStatus.md).
 
 ## Локальный запуск
 
@@ -19,7 +21,7 @@
 Для проверки текстовой сборки используйте:
 
 ```powershell
-rokit run rojo build default.project.json --output $env:TEMP\toxic-rain-validation.rbxlx
+rojo build default.project.json --output $env:TEMP\toxic-rain-validation.rbxlx
 ```
 
 ## Разработка игровых фич
@@ -31,7 +33,8 @@ rokit run rojo build default.project.json --output $env:TEMP\toxic-rain-validati
 ## Обновление основы
 
 Шаблон подключён как `upstream`. Перед обновлением следуйте
-`.agents/rules/template-updates.md`; проектный `place.rbxl` и решения из
-`docs/adr/project/` должны сохраняться согласно проектным ADR.
+`.agents/rules/template-workflow.md`; проектный `place.rbxl`,
+`src/ReplicatedStorage/Project/`, `docs/Features/project/` и
+`docs/adr/project/` сохраняются как защищённые данные проекта.
 
 Исходный шаблон: [teano/roblox_project_template](https://github.com/teano/roblox_project_template).

@@ -7,7 +7,6 @@ local AudioCatalog = require(ReplicatedStorage.Shared.Audio.AudioCatalog)
 local AudioConfigValidator = require(ReplicatedStorage.Shared.Audio.AudioConfigValidator)
 local RuntimeConfig = require(ReplicatedStorage.Shared.Configs.Audio.AudioRuntimeConfig)
 local RoutingConfig = require(ReplicatedStorage.Shared.Configs.Audio.RoutingConfig)
-local SoundCatalog = require(ReplicatedStorage.Shared.Configs.Audio.SoundCatalog)
 local SpatialProfiles = require(ReplicatedStorage.Shared.Configs.Audio.SpatialProfiles)
 local Bridge = require(ReplicatedStorage.Shared.Tests.AudioManualQaBridge)
 local Contracts = require(ReplicatedStorage.Shared.Tests.AudioManualQaContracts)
@@ -32,8 +31,23 @@ local function makeLiveFixture(scope: any): (Instance, any)
 	local byPath = {}
 	local pathBySound = {}
 	local allSounds = {}
+	local fixtureRows = {}
 	for _, key in Plan.LiveAssetOrder do
 		local expected = Plan.LiveAssets[key]
+		table.insert(fixtureRows, {
+			CueId = expected.CueId,
+			VariantId = expected.VariantId,
+			PlayerType = expected.PlayerType,
+			AssetId = expected.AssetId,
+			ResourcePath = expected.DescriptorPath,
+			Volume01 = expected.Volume01,
+			PlaybackSpeed = expected.PlaybackSpeed,
+			Looping = expected.Looping,
+			Preload = expected.Preload,
+			SpatialProfile = expected.SpatialProfileId,
+			Weight = 1,
+			AllowClientHybrid = expected.AllowClientHybrid,
+		})
 		local parent = sounds
 		local name = string.sub(expected.DescriptorPath, #"Shared/Sounds/" + 1)
 		if string.sub(name, 1, #"SFX/") == "SFX/" then
@@ -67,7 +81,7 @@ local function makeLiveFixture(scope: any): (Instance, any)
 		GetPath = function(_self: any, sound: Instance): string? return pathBySound[sound] end,
 		FindAll = function() return allSounds end,
 	}
-	local catalog = AudioCatalog.new(SoundCatalog, validation.Config, registry, logger, function() return 0 end)
+	local catalog = AudioCatalog.new(fixtureRows, validation.Config, registry, logger, function() return 0 end)
 	return assets, catalog
 end
 

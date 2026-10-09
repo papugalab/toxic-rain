@@ -45,10 +45,18 @@ local function deepClone(value: any): any
 end
 
 local function syntheticSfxRow(): any
-	local result = table.clone(SoundCatalog[1])
-	result.ResourcePath = nil
-	result.Preload = false
-	return result
+	return {
+		CueId = "Template.SFX.CartoonBubble",
+		VariantId = "Default",
+		PlayerType = "SFX",
+		AssetId = "5852470908",
+		Volume01 = 0.8,
+		PlaybackSpeed = 1,
+		Looping = false,
+		Preload = false,
+		Weight = 1,
+		AllowClientHybrid = true,
+	}
 end
 
 local function shippedRegistry(scope: any): any
@@ -147,31 +155,24 @@ function Runner.runAll()
 	end)
 	test("AudioCatalog/StablePairAndExactSoundRef", function(scope)
 		local catalog = Catalog.new(SoundCatalog, validated("Client"), shippedRegistry(scope), logger(), function() return 0 end)
-		local sfx = catalog:GetNamedVariant("Template.SFX.CartoonBubble", "Default")
-		local world = catalog:GetNamedVariant("Template.World.OldCarEngine", "Default")
-		local music = catalog:GetNamedVariant("Template.Music.PrayerRiver", "Default")
-		assert(#catalog:GetSnapshot().Variants == 3, "Shipped catalog must contain exactly three reviewed live rows")
-		assert(sfx and sfx.AssetId == "5852470908" and sfx.SourceVolume == 0.8
-			and sfx.ResourcePath == "Shared/Sounds/SFX/Cartoon bubble button Sound"
-			and sfx.PlayerType == "SFX" and sfx.Preload == true and sfx.AllowClientHybrid == true)
-		assert(world and world.AssetId == "137048982817372" and world.SourceVolume == 0.8
-			and world.ResourcePath == "Shared/Sounds/SFX/engine sound for old cars"
-			and world.PlayerType == "World" and world.SpatialProfileId == "WorldDefault"
-			and world.Preload == true and world.AllowClientHybrid == true)
-		assert(music and music.AssetId == "91760644839532" and music.SourceVolume == 0.5
-			and music.ResourcePath == "Shared/Sounds/Music/祈りの川"
-			and music.PlayerType == "Music" and music.Looping == true
-			and music.Preload == true and music.AllowClientHybrid == false)
-		assert(catalog:Resolve({ AssetId = "5852470908" }) == sfx)
-		assert(catalog:Resolve({ ResourcePath = "Shared/Sounds/SFX/engine sound for old cars" }) == world)
-		assert(catalog:Resolve({ AssetId = "91760644839532" }) == music)
+		local victory = catalog:GetNamedVariant("ToxicRain.SFX.Victory", "Default")
+		local thunder = catalog:GetNamedVariant("ToxicRain.SFX.Thunder", "Default")
+		assert(#catalog:GetSnapshot().Variants == 2, "Shipped catalog must contain exactly two Toxic Rain rows")
+		assert(victory and victory.AssetId == "9041792228" and victory.SourceVolume == 0.5
+			and victory.ResourcePath == "Shared/Sounds/Toxic Rain Victory Fanfare"
+			and victory.PlayerType == "SFX" and victory.Preload == true and victory.AllowClientHybrid == false)
+		assert(thunder and thunder.AssetId == "9126069487" and thunder.SourceVolume == 0.3
+			and thunder.ResourcePath == "Shared/Sounds/Toxic Rain Thunder Crack"
+			and thunder.PlayerType == "SFX" and thunder.Preload == true and thunder.AllowClientHybrid == false)
+		assert(catalog:Resolve({ AssetId = "9041792228" }) == victory)
+		assert(catalog:Resolve({ ResourcePath = "Shared/Sounds/Toxic Rain Thunder Crack" }) == thunder)
 		local preload = catalog:GetSnapshot().PreloadContentIds
-		assert(#preload == 3 and preload[1] == "rbxassetid://137048982817372"
-			and preload[2] == "rbxassetid://5852470908" and preload[3] == "rbxassetid://91760644839532",
-			"Shipped preload set must be exact, sorted, and contain all three live assets")
+		assert(#preload == 2 and preload[1] == "rbxassetid://9041792228"
+			and preload[2] == "rbxassetid://9126069487",
+			"Shipped preload set must be exact, sorted, and contain both Toxic Rain assets")
 		assert(catalog:Resolve({}) == nil)
-		assert(catalog:Resolve({ CueId = "Template.SFX.CartoonBubble", AssetId = "5852470908" }) == nil)
-		assert(table.isfrozen(catalog:GetSnapshot()) and table.isfrozen(sfx) and table.isfrozen(world) and table.isfrozen(music))
+		assert(catalog:Resolve({ CueId = "ToxicRain.SFX.Victory", AssetId = "9041792228" }) == nil)
+		assert(table.isfrozen(catalog:GetSnapshot()) and table.isfrozen(victory) and table.isfrozen(thunder))
 	end)
 	test("AudioCatalog/IdentifierAndFiniteNumericGrammar", function()
 		local base = syntheticSfxRow()
@@ -339,8 +340,8 @@ function Runner.runAll()
 	-- aggregate case.
 	test("AudioCatalog/RawAssetExactVariant", function(scope)
 		local catalog = Catalog.new(SoundCatalog, validated("Client"), shippedRegistry(scope), logger(), function() return 0 end)
-		local expected = catalog:GetNamedVariant("Template.SFX.CartoonBubble", "Default")
-		assert(expected ~= nil and catalog:Resolve({ AssetId = "rbxassetid://5852470908" }) == expected)
+		local expected = catalog:GetNamedVariant("ToxicRain.SFX.Victory", "Default")
+		assert(expected ~= nil and catalog:Resolve({ AssetId = "rbxassetid://9041792228" }) == expected)
 	end)
 	test("AudioCatalog/RequiredStableCueVariantPair", function()
 		local valid = syntheticSfxRow()

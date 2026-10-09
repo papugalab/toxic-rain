@@ -284,6 +284,15 @@ local function makePlayer(userId: number, character: any?)
 	} :: any
 end
 
+local function makeClientPlayersService(player: Player?): any
+	return {
+		LocalPlayer = player,
+		GetPlayers = function()
+			return if player then { player } else {}
+		end,
+	}
+end
+
 function ProductionReadinessTestRunner.runAll()
 	local tests = {}
 
@@ -2804,6 +2813,9 @@ function ProductionReadinessTestRunner.runAll()
 		local player = makePlayer(40, existingCharacter)
 		local service = {
 			LocalPlayer = player,
+			GetPlayers = function()
+				return { player }
+			end,
 		}
 		scope:Defer(function()
 			player:Destroy()
@@ -2816,11 +2828,17 @@ function ProductionReadinessTestRunner.runAll()
 			module:GetLocalPlayer()
 		end, "PlayersModuleNotInitialized")
 		assertThrows(function()
+			module:GetPlayers()
+		end, "PlayersModuleNotInitialized")
+		assertThrows(function()
 			module.CharacterAdded:Connect(function() end)
 		end, "PlayersModuleNotInitialized")
 		module:Initialize()
 		module:Initialize()
 		assertEqual(module:GetLocalPlayer(), player)
+		local players = module:GetPlayers()
+		assertEqual(#players, 1)
+		assertEqual(players[1], player)
 		assertEqual(
 			(module :: any).LocalPlayer,
 			nil,
@@ -2954,13 +2972,14 @@ function ProductionReadinessTestRunner.runAll()
 		task.wait()
 		assertEqual(failedObserverCalls, 0, "failed observer registration retained its callback")
 
-		local client = ClientPlayersModule.new({ LocalPlayer = player })
+		local client = ClientPlayersModule.new(makeClientPlayersService(player))
 		scope:Defer(function()
 			client:Stop()
 		end)
 		local function clientOperations(includeInitialize: boolean): { [string]: () -> () }
 			local operations = {
 				GetLocalPlayer = function() client:GetLocalPlayer() end,
+				GetPlayers = function() client:GetPlayers() end,
 				GetCharacter = function() client:GetCharacter() end,
 				WaitForCharacter = function() client:WaitForCharacter() end,
 				CharacterAddedConnect = function() client.CharacterAdded:Connect(function() end) end,
@@ -3019,7 +3038,7 @@ function ProductionReadinessTestRunner.runAll()
 		scope:Defer(function()
 			clientPlayer:Destroy()
 		end)
-		local client = ClientPlayersModule.new({ LocalPlayer = clientPlayer })
+		local client = ClientPlayersModule.new(makeClientPlayersService(clientPlayer))
 		scope:Defer(function()
 			client:Stop()
 		end)
@@ -3357,7 +3376,7 @@ function ProductionReadinessTestRunner.runAll()
 	end)
 
 	test("client initialization failures and waiters terminate cleanly", function(scope)
-		local nilModule = ClientPlayersModule.new({ LocalPlayer = nil })
+		local nilModule = ClientPlayersModule.new(makeClientPlayersService(nil))
 		scope:Defer(function()
 			nilModule:Stop()
 		end)
@@ -3370,7 +3389,7 @@ function ProductionReadinessTestRunner.runAll()
 
 		local firstConnectionPlayer = makePlayer(4_405)
 		firstConnectionPlayer.CharacterAdded.FailConnectAt = 1
-		local firstConnectionModule = ClientPlayersModule.new({ LocalPlayer = firstConnectionPlayer })
+		local firstConnectionModule = ClientPlayersModule.new(makeClientPlayersService(firstConnectionPlayer))
 		scope:Defer(function()
 			firstConnectionPlayer:Destroy()
 			firstConnectionModule:Stop()
@@ -3386,7 +3405,7 @@ function ProductionReadinessTestRunner.runAll()
 
 		local partialPlayer = makePlayer(4_402)
 		partialPlayer.CharacterRemoving.FailConnectAt = 1
-		local partialModule = ClientPlayersModule.new({ LocalPlayer = partialPlayer })
+		local partialModule = ClientPlayersModule.new(makeClientPlayersService(partialPlayer))
 		scope:Defer(function()
 			partialPlayer:Destroy()
 			partialModule:Stop()
@@ -3420,7 +3439,7 @@ function ProductionReadinessTestRunner.runAll()
 			clientReentrantError = result
 			interruptedClient:Stop()
 		end
-		interruptedClient = ClientPlayersModule.new({ LocalPlayer = interruptedPlayer })
+		interruptedClient = ClientPlayersModule.new(makeClientPlayersService(interruptedPlayer))
 		scope:Defer(function()
 			interruptedPlayer:Destroy()
 			interruptedClient:Stop()
@@ -3432,7 +3451,7 @@ function ProductionReadinessTestRunner.runAll()
 		assertEqual(interruptedPlayer.CharacterAdded:ActiveCount(), 0)
 
 		local player = makePlayer(44)
-		local module = ClientPlayersModule.new({ LocalPlayer = player })
+		local module = ClientPlayersModule.new(makeClientPlayersService(player))
 		scope:Defer(function()
 			player:Destroy()
 			module:Stop()

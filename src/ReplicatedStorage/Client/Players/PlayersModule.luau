@@ -18,12 +18,14 @@ export type PlayersLifecycleSignal<T...> = {
 
 export type ClientPlayersServiceBoundary = {
 	LocalPlayer: Player?,
+	GetPlayers: (self: ClientPlayersServiceBoundary) -> { Player },
 }
 
 export type ClientPlayersModule = {
 	Initialize: (self: ClientPlayersModule) -> (),
 	Stop: (self: ClientPlayersModule) -> (),
 	GetLocalPlayer: (self: ClientPlayersModule) -> Player,
+	GetPlayers: (self: ClientPlayersModule) -> { Player },
 	GetCharacter: (self: ClientPlayersModule) -> Model?,
 	WaitForCharacter: (self: ClientPlayersModule) -> Model,
 	CharacterAdded: PlayersLifecycleSignal<Model>,
@@ -233,6 +235,11 @@ end
 function PlayersModule.GetLocalPlayer(self: ClientPlayersModuleImpl): Player
 	requireActive(self)
 	return assert(self._localPlayer)
+end
+
+function PlayersModule.GetPlayers(self: ClientPlayersModuleImpl): { Player }
+	requireActive(self)
+	return self._players:GetPlayers()
 end
 
 function PlayersModule.GetCharacter(self: ClientPlayersModuleImpl): Model?

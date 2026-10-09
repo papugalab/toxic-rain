@@ -42,6 +42,8 @@ local AudioGraphServer = require(Modules.Audio.AudioGraphServer)
 local OrdinarySoundServer = require(Modules.Audio.OrdinarySoundServer)
 local HybridOneShotServerController = require(Modules.Audio.HybridOneShotServerController)
 local AudioSettingsModule = require(Modules.Audio.AudioSettingsModule)
+local RoundRuntime = require(Modules.ToxicRain.RoundRuntime)
+local ShelterCombatRuntime = require(Modules.ToxicRain.ShelterCombatRuntime)
 
 local Commands = script.Parent.Commands
 local AssetRegistryInitializationCommand = require(Commands.AssetRegistryInitializationCommand)
@@ -60,6 +62,8 @@ local PersistenceScheduleInitializationCommand = require(Commands.PersistenceSch
 local AudioStartupInitializationCommand = require(Commands.AudioStartupInitializationCommand)
 local AudioGraphInitializationCommand = require(Commands.AudioGraphInitializationCommand)
 local OrdinarySoundInitializationCommand = require(Commands.OrdinarySoundInitializationCommand)
+local ToxicRainRoundInitializationCommand = require(Commands.ToxicRainRoundInitializationCommand)
+local ToxicRainShelterCombatInitializationCommand = require(Commands.ToxicRainShelterCombatInitializationCommand)
 
 local replicatedAssets = ReplicatedStorage:FindFirstChild("Assets")
 assert(replicatedAssets ~= nil and replicatedAssets:IsA("Folder"), "ReplicatedStorage.Assets must be a Folder")
@@ -160,6 +164,12 @@ local hybridAudio = HybridOneShotServerController.new({
 	Logger = audioLogger,
 })
 local audioSettings = AudioSettingsModule.new()
+local toxicRainRound = RoundRuntime.new(playersModule, Workspace)
+local toxicRainShelterCombat = ShelterCombatRuntime.new({
+	PlayersModule = playersModule,
+	Communication = communication,
+	Workspace = Workspace,
+})
 local sharedRoot = ReplicatedStorage:FindFirstChild("Shared")
 local configsRoot = if sharedRoot then sharedRoot:FindFirstChild("Configs") else nil
 local audioConfigRoot = if configsRoot then configsRoot:FindFirstChild("Audio") else nil
@@ -184,6 +194,8 @@ local services = {
 	AudioGraph = audioGraph,
 	OrdinarySound = ordinarySound,
 	AudioSettings = audioSettings,
+	ToxicRainRound = toxicRainRound,
+	ToxicRainShelterCombat = toxicRainShelterCombat,
 }
 
 local commands = {
@@ -191,7 +203,9 @@ local commands = {
 	AudioStartupInitializationCommand.new(audioConfigRoot, assetRegistry, "Server", audioLogger, sharedAssets),
 	PoolingInitializationCommand.new(poolModule),
 	PlayersInitializationCommand.new(playersModule),
+	ToxicRainRoundInitializationCommand.new(toxicRainRound),
 	CommunicationInitializationCommand.new(communication),
+	ToxicRainShelterCombatInitializationCommand.new(toxicRainShelterCombat),
 	AudioGraphInitializationCommand.new(audioGraph),
 	OrdinarySoundInitializationCommand.new(ordinarySound, hybridAudio),
 	TeleportInitializationCommand.new(teleportModule),

@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local PodiumPresentation = require(script.Parent.PodiumPresentation)
 
 local Controller = {} Controller.__index = Controller
 function Controller.new(ui: any, workspace: Workspace, playersModule: any) return setmetatable({_ui=ui,_workspace=workspace,_playersModule=playersModule},Controller) end
@@ -10,13 +11,15 @@ function Controller.new(ui: any, workspace: Workspace, playersModule: any) retur
 function Controller:Initialize()
 	local player=self._playersModule:GetLocalPlayer()
 	local host=self._ui:GetHudHost()
+	local podium=PodiumPresentation.new(self._ui,self._workspace,self._playersModule)
+	podium:Initialize()
 	local isMobile=UserInputService.TouchEnabled
 	task.spawn(function()
 		local map=self._workspace:WaitForChild("ToxicRainMap",10)
 		local lobby=map and map:WaitForChild("Lobby",10)
 		if not lobby then return end
 		local billboards = {} :: { BillboardGui }
-		for _,definition in {{pad="SoloPad",text="SOLO • СТАРТ"},{pad="GroupPad",text="GROUP 2–10"}} do
+		for _,definition in {{pad="SoloPad",text="SOLO • СТАРТ"},{pad="GroupPad",text="GROUP 2–16"}} do
 			local pad=lobby:WaitForChild(definition.pad,10)
 			local billboard=pad and pad:WaitForChild("QueueLabel",10)
 			if billboard and billboard:IsA("BillboardGui") then
@@ -48,10 +51,7 @@ function Controller:Initialize()
 	local winner=Instance.new("TextLabel") winner.Name="ToxicRainWinnerEffect" winner.AnchorPoint=Vector2.new(0.5,0.5) winner.Size=UDim2.new(1,-40,0,64) winner.Position=UDim2.fromScale(0.5,0.5) winner.BackgroundColor3=Color3.fromRGB(90,70,8) winner.BackgroundTransparency=0.18 winner.TextColor3=Color3.fromRGB(255,255,190) winner.TextStrokeTransparency=0.15 winner.Font=Enum.Font.GothamBlack winner.TextScaled=true winner.TextWrapped=true winner.Visible=false winner.ZIndex=8 winner.Parent=host
 	local winnerSizeConstraint=Instance.new("UISizeConstraint") winnerSizeConstraint.MaxSize=Vector2.new(520,64) winnerSizeConstraint.Parent=winner
 	local winnerTextConstraint=Instance.new("UITextSizeConstraint") winnerTextConstraint.MinTextSize=16 winnerTextConstraint.MaxTextSize=30 winnerTextConstraint.Parent=winner
-	if not isMobile then
-		winnerSizeConstraint:Destroy() winnerTextConstraint:Destroy()
-		winner.AnchorPoint=Vector2.zero winner.Position=UDim2.fromScale(0,0) winner.Size=UDim2.fromScale(1,1) winner.BackgroundColor3=Color3.fromRGB(255,210,35) winner.BackgroundTransparency=0.72 winner.TextScaled=false winner.TextWrapped=false winner.TextSize=52
-	end
+	winner.Position=UDim2.fromScale(0.5,0.22)
 	-- The countdown stays low on screen while the camera shows the starting group.
 	local cinematic=Instance.new("Frame") cinematic.Name="ToxicRainStartCutscene" cinematic.Size=UDim2.fromScale(1,1) cinematic.BackgroundTransparency=1 cinematic.Visible=false cinematic.ZIndex=12 cinematic.Parent=host
 	local topBar=Instance.new("Frame") topBar.Name="TopBar" topBar.AnchorPoint=Vector2.new(0.5,0.5) topBar.Position=UDim2.fromScale(0.5,0.82) topBar.Size=if isMobile then UDim2.new(0.9,0,0,70) else UDim2.new(0.92,0,0,88) topBar.BackgroundColor3=Color3.new(0,0,0) topBar.BackgroundTransparency=0.08 topBar.BorderSizePixel=0 topBar.ZIndex=12 topBar.Parent=cinematic
@@ -216,7 +216,7 @@ function Controller:Initialize()
 			cutscenePlayed=false
 			if cutsceneActive then cancelCutscene() end
 		elseif self._workspace:GetAttribute("ToxicRainStartLocked")~=true then
-			if cutsceneActive then cancelCutscene() elseif player:GetAttribute("ToxicRainResult")~="Lost" then restorePlayerCamera(true) end
+			if cutsceneActive then cancelCutscene() elseif player:GetAttribute("ToxicRainResult")==nil then restorePlayerCamera(true) end
 		elseif player:GetAttribute("ToxicRainQueueMode")=="Running" and not cutscenePlayed then
 			cutscenePlayed=true
 			playStartCutscene()
@@ -227,15 +227,20 @@ function Controller:Initialize()
 	player:GetAttributeChangedSignal("ToxicRainQueueMode"):Connect(updateCutsceneState)
 	local function update()
 		rain.Visible=false
-		local winnerName=self._workspace:GetAttribute("ToxicRainWinnerName") winner.Visible=typeof(winnerName)=="string" winner.Text=if typeof(winnerName)=="string" then `ПОБЕДИТЕЛЬ: {winnerName}!` else ""
+		local winnerName=self._workspace:GetAttribute("ToxicRainWinnerName") winner.Visible=typeof(winnerName)=="string" and not podium:OwnsCamera() winner.Text=if typeof(winnerName)=="string" then `ПОБЕДИТЕЛЬ: {winnerName}!` else ""
 	end
 	for _,name in {"ToxicRainActivePlayers","ToxicRainStartedPlayers","ToxicRainWeather","ToxicRainWinnerName"} do self._workspace:GetAttributeChangedSignal(name):Connect(update) end
 	RunService.RenderStepped:Connect(function(dt)
+		local hadPodiumCamera=podium._cameraOwned
+		if podium:OwnsCamera() then cameraRestoreToken+=1 cameraHandoffActive=false end
+		podium:Update(dt)
+		if podium:OwnsCamera() then winner.Visible=false end
+		if hadPodiumCamera and not podium:OwnsCamera() then restorePlayerCamera(true) end
 		if rain.Visible then for index,line in streaks do local y=line.Position.Y.Scale+dt*(1.4+index%5*0.12) line.Position=UDim2.fromScale(line.Position.X.Scale,y%1.12-0.08) end end
 		local map=self._workspace:FindFirstChild("ToxicRainMap") local decoration=map and map:FindFirstChild("Decoration")
 		if decoration then for _,arrow in decoration:GetChildren() do if arrow:IsA("Model") and string.sub(arrow.Name,1,10)=="RoadArrow_" then local phase=arrow:GetAttribute("AnimationPhase") or 0 local glow=((os.clock()*1.8+phase)%1)<0.42 for _,part in arrow:GetChildren() do if part:IsA("BasePart") then part.Transparency=if glow then 0 else 0.72 end end end end end
 		local state=self._workspace:GetAttribute("ToxicRainRoundState") or "Waiting"
-		local isActiveGameplay=state=="Running" and self._workspace:GetAttribute("ToxicRainStartLocked")~=true and player:GetAttribute("ToxicRainQueueMode")=="Running" and player:GetAttribute("ToxicRainResult")~="Lost"
+		local isActiveGameplay=state=="Running" and self._workspace:GetAttribute("ToxicRainStartLocked")~=true and player:GetAttribute("ToxicRainQueueMode")=="Running" and player:GetAttribute("ToxicRainResult")==nil
 		if isActiveGameplay then
 			local camera=self._workspace.CurrentCamera
 			local character=self._playersModule:GetCharacter()
@@ -243,7 +248,7 @@ function Controller:Initialize()
 			if camera and humanoid and not cameraHandoffActive and (camera.CameraType~=Enum.CameraType.Custom or camera.CameraSubject~=humanoid) then
 				restorePlayerCamera()
 			end
-		elseif not cutsceneActive and (spectating or player:GetAttribute("ToxicRainResult")=="Lost") then
+		elseif not cutsceneActive and not podium:OwnsCamera() and (spectating or player:GetAttribute("ToxicRainResult")=="Lost") then
 			local winnerId=self._workspace:GetAttribute("ToxicRainWinnerUserId") local target:Player?=if typeof(winnerId)=="number" then Players:GetPlayerByUserId(winnerId) else nil
 			if not target then for _,candidate in Players:GetPlayers() do local humanoid=candidate.Character and candidate.Character:FindFirstChildOfClass("Humanoid") if candidate~=player and humanoid and humanoid.Health>0 and candidate:GetAttribute("ToxicRainResult")~="Lost" then target=candidate break end end end
 			local humanoid=target and target.Character and target.Character:FindFirstChildOfClass("Humanoid") if humanoid and self._workspace.CurrentCamera then self._workspace.CurrentCamera.CameraSubject=humanoid end

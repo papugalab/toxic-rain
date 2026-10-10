@@ -4,7 +4,7 @@ local Command = {}
 Command.__index = Command
 
 function Command.new(runtime: any)
-	return setmetatable({ Id = "ToxicRainRound", DependsOn = { "Players" }, _runtime = runtime }, Command)
+	return setmetatable({ Id = "ToxicRainRound", DependsOn = { "Players", "Communication" }, _runtime = runtime }, Command)
 end
 
 function Command:Initialize(_context: any)

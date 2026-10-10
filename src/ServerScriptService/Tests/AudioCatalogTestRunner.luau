@@ -158,7 +158,7 @@ function Runner.runAll()
 		local victory = catalog:GetNamedVariant("ToxicRain.SFX.Victory", "Default")
 		local thunder = catalog:GetNamedVariant("ToxicRain.SFX.Thunder", "Default")
 		assert(#catalog:GetSnapshot().Variants == 2, "Shipped catalog must contain exactly two Toxic Rain rows")
-		assert(victory and victory.AssetId == "9041792228" and victory.SourceVolume == 0.5
+		assert(victory and victory.AssetId == "9041792228" and victory.SourceVolume == 0.03
 			and victory.ResourcePath == "Shared/Sounds/Toxic Rain Victory Fanfare"
 			and victory.PlayerType == "SFX" and victory.Preload == true and victory.AllowClientHybrid == false)
 		assert(thunder and thunder.AssetId == "9126069487" and thunder.SourceVolume == 0.3

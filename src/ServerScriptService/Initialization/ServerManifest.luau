@@ -44,6 +44,8 @@ local HybridOneShotServerController = require(Modules.Audio.HybridOneShotServerC
 local AudioSettingsModule = require(Modules.Audio.AudioSettingsModule)
 local RoundRuntime = require(Modules.ToxicRain.RoundRuntime)
 local ShelterCombatRuntime = require(Modules.ToxicRain.ShelterCombatRuntime)
+local StudioNpcTestRuntime = require(Modules.ToxicRain.StudioNpcTestRuntime)
+local StudioNpcFixture = require(script.Parent.Parent.Tests.Fixtures.ToxicRainNpcPlaytest)
 
 local Commands = script.Parent.Commands
 local AssetRegistryInitializationCommand = require(Commands.AssetRegistryInitializationCommand)
@@ -64,6 +66,7 @@ local AudioGraphInitializationCommand = require(Commands.AudioGraphInitializatio
 local OrdinarySoundInitializationCommand = require(Commands.OrdinarySoundInitializationCommand)
 local ToxicRainRoundInitializationCommand = require(Commands.ToxicRainRoundInitializationCommand)
 local ToxicRainShelterCombatInitializationCommand = require(Commands.ToxicRainShelterCombatInitializationCommand)
+local ToxicRainStudioNpcTestInitializationCommand = require(Commands.ToxicRainStudioNpcTestInitializationCommand)
 
 local replicatedAssets = ReplicatedStorage:FindFirstChild("Assets")
 assert(replicatedAssets ~= nil and replicatedAssets:IsA("Folder"), "ReplicatedStorage.Assets must be a Folder")
@@ -164,13 +167,20 @@ local hybridAudio = HybridOneShotServerController.new({
 	Logger = audioLogger,
 })
 local audioSettings = AudioSettingsModule.new()
-local toxicRainRound = RoundRuntime.new(playersModule, Workspace)
+local toxicRainRound = RoundRuntime.new(playersModule, Workspace, communication)
 local toxicRainShelterCombat = ShelterCombatRuntime.new({
 	PlayersModule = playersModule,
 	Communication = communication,
 	Workspace = Workspace,
 })
 local sharedRoot = ReplicatedStorage:FindFirstChild("Shared")
+local studioNpcTest = StudioNpcTestRuntime.new({
+	PlayersModule = playersModule, Communication = communication, Workspace = Workspace,
+	Round = toxicRainRound, Combat = toxicRainShelterCombat,
+	RoundFactory = RoundRuntime, CombatFactory = ShelterCombatRuntime,
+	CreateFixture = StudioNpcFixture.Create, IsStudio = RunService:IsStudio(),
+	PlaceId = game.PlaceId, GameId = game.GameId, Clock = os.clock,
+})
 local configsRoot = if sharedRoot then sharedRoot:FindFirstChild("Configs") else nil
 local audioConfigRoot = if configsRoot then configsRoot:FindFirstChild("Audio") else nil
 
@@ -196,6 +206,7 @@ local services = {
 	AudioSettings = audioSettings,
 	ToxicRainRound = toxicRainRound,
 	ToxicRainShelterCombat = toxicRainShelterCombat,
+	ToxicRainStudioNpcTest = studioNpcTest,
 }
 
 local commands = {
@@ -203,9 +214,10 @@ local commands = {
 	AudioStartupInitializationCommand.new(audioConfigRoot, assetRegistry, "Server", audioLogger, sharedAssets),
 	PoolingInitializationCommand.new(poolModule),
 	PlayersInitializationCommand.new(playersModule),
-	ToxicRainRoundInitializationCommand.new(toxicRainRound),
 	CommunicationInitializationCommand.new(communication),
+	ToxicRainRoundInitializationCommand.new(toxicRainRound),
 	ToxicRainShelterCombatInitializationCommand.new(toxicRainShelterCombat),
+	ToxicRainStudioNpcTestInitializationCommand.new(studioNpcTest),
 	AudioGraphInitializationCommand.new(audioGraph),
 	OrdinarySoundInitializationCommand.new(ordinarySound, hybridAudio),
 	TeleportInitializationCommand.new(teleportModule),

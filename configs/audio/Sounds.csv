@@ -1,3 +1,3 @@
 CueId,VariantId,PlayerType,AssetId,AssetKey,ResourcePath,Volume01,PlaybackSpeed,Looping,Preload,PlaybackRegionStart,PlaybackRegionEnd,LoopRegionStart,LoopRegionEnd,SpatialProfile,Weight,AllowClientHybrid
-ToxicRain.SFX.Victory,Default,SFX,9041792228,,Shared/Sounds/Toxic Rain Victory Fanfare,0.5,1,false,true,,,,,,1,false
+ToxicRain.SFX.Victory,Default,SFX,9041792228,,Shared/Sounds/Toxic Rain Victory Fanfare,0.03,1,false,true,,,,,,1,false
 ToxicRain.SFX.Thunder,Default,SFX,9126069487,,Shared/Sounds/Toxic Rain Thunder Crack,0.3,1,false,true,,,,,,1,false

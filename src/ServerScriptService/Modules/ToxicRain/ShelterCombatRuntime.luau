@@ -150,6 +150,7 @@ end
 function Runtime:_isActivePlayer(player: Player): boolean
 	return self._workspace:GetAttribute("ToxicRainRoundState") == "Running"
 		and player:GetAttribute("ToxicRainQueueMode") == "Running"
+		and player:GetAttribute("ToxicRainResult") == nil
 		and typeof(player:GetAttribute("ToxicRainXP")) == "number"
 		and (player:GetAttribute("ToxicRainXP") :: number) > 0
 end
@@ -399,14 +400,14 @@ function Runtime:_createPushTool(player: Player)
 	handle.Massless = true
 	handle.Parent = tool
 	local white = Color3.fromRGB(245, 245, 245)
-	addToolPart(tool, handle, "LongArm", Vector3.new(1.05, 1.05, 5.8), CFrame.new(0, 0, -3.15), white)
-	addToolPart(tool, handle, "Palm", Vector3.new(2.5, 0.75, 2.4), CFrame.new(0, 0, -6.9), white)
+	addToolPart(tool, handle, "Wrist", Vector3.new(0.55, 0.45, 0.8), CFrame.new(0, 0, -0.55), white)
+	addToolPart(tool, handle, "Palm", Vector3.new(1.3, 0.4, 1.15), CFrame.new(0, 0, -1.3), white)
 	for fingerIndex = 1, 4 do
-		local x = (fingerIndex - 2.5) * 0.58
-		addToolPart(tool, handle, `Finger{fingerIndex}`, Vector3.new(0.48, 0.55, 1.8), CFrame.new(x, 0, -8.75), white)
+		local x = (fingerIndex - 2.5) * 0.31
+		local length = if fingerIndex == 1 or fingerIndex == 4 then 0.7 else 0.85
+		addToolPart(tool, handle, `Finger{fingerIndex}`, Vector3.new(0.26, 0.34, length), CFrame.new(x, 0, -1.85 - length * 0.5), white)
 	end
-	addToolPart(tool, handle, "Thumb", Vector3.new(0.65, 0.65, 1.5), CFrame.new(1.45, 0, -7.35) * CFrame.Angles(0, math.rad(-35), 0), white)
-	addToolPart(tool, handle, "ToxicCuff", Vector3.new(1.35, 1.35, 0.9), CFrame.new(0, 0, -0.85), Color3.fromRGB(95, 255, 120))
+	addToolPart(tool, handle, "Thumb", Vector3.new(0.34, 0.34, 0.8), CFrame.new(0.78, 0, -1.45) * CFrame.Angles(0, math.rad(-35), 0), white)
 	tool.Grip = CFrame.new(0, -0.15, -0.2) * CFrame.Angles(math.rad(-90), 0, 0)
 	local activatedConnection = tool.Activated:Connect(function()
 		if tool.Parent ~= player.Character then return end

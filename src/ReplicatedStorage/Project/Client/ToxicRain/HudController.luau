@@ -34,14 +34,6 @@ function Controller:Initialize()
 	local host = self._ui:GetHudHost()
 	local player = self._players:GetLocalPlayer()
 	local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-	local overlay = Instance.new("Frame")
-	overlay.Name = "ToxicRainOverlay"
-	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = Color3.fromRGB(50, 255, 65)
-	overlay.BackgroundTransparency = 0.84
-	overlay.Visible = false
-	overlay.Parent = host
-
 	local status = addText(host, "ToxicRainStatus", if isMobile then UDim2.new(0.54, 0, 0, 30) else UDim2.fromOffset(500, 30), if isMobile then UDim2.new(0.5, 0, 0, 0) else UDim2.new(0.5, 0, 0, -42), if isMobile then 10 else 13)
 	status.AnchorPoint = Vector2.new(0.5, 0)
 	status.BackgroundColor3 = Color3.fromRGB(12, 18, 18)
@@ -53,7 +45,10 @@ function Controller:Initialize()
 	local healthPanel = Instance.new("Frame")
 	healthPanel.Name = "ToxicRainHealthPanel"
 	healthPanel.AnchorPoint = Vector2.new(0.5, 0)
-	healthPanel.Size = if isMobile then UDim2.new(0.54, 0, 0, 78) else UDim2.fromOffset(420, 78)
+	healthPanel.Size = UDim2.new(1, -24, 0, 76)
+	local panelSizeLimit = Instance.new("UISizeConstraint")
+	panelSizeLimit.MaxSize = Vector2.new(660, 76)
+	panelSizeLimit.Parent = healthPanel
 	healthPanel.Position = if isMobile then UDim2.new(0.5, 0, 0, 36) else UDim2.new(0.5, 0, 0, -6)
 	healthPanel.BackgroundColor3 = Color3.fromRGB(12, 18, 18)
 	healthPanel.BackgroundTransparency = 0.12
@@ -93,19 +88,28 @@ function Controller:Initialize()
 		addCorner(fill, 3)
 		table.insert(segments, fill)
 	end
-	local shelterHint = addText(healthPanel, "ToxicRainShelterHint", UDim2.new(1, -12, 0, 13), UDim2.fromOffset(6, 33), if isMobile then 8 else 9)
-	shelterHint.Text = "ПРЯЧЬТЕСЬ ПОД ОСТАНОВКАМИ"
-	shelterHint.TextColor3 = Color3.fromRGB(205, 215, 210)
-	shelterHint.TextXAlignment = Enum.TextXAlignment.Center
-	local appleHint = addText(healthPanel, "ToxicRainAppleHint", UDim2.new(1, -12, 0, 13), UDim2.fromOffset(6, 47), if isMobile then 8 else 9)
-	appleHint.TextColor3 = Color3.fromRGB(255, 215, 105)
-	appleHint.TextXAlignment = Enum.TextXAlignment.Center
-	local puddleHint = addText(healthPanel, "ToxicRainPuddleHint", UDim2.new(1, -12, 0, 13), UDim2.fromOffset(6, 61), if isMobile then 8 else 9)
-	puddleHint.Text = "НЕ НАСТУПАЙТЕ НА ЛУЖИ"
-	puddleHint.TextColor3 = Color3.fromRGB(130, 255, 145)
-	puddleHint.TextXAlignment = Enum.TextXAlignment.Center
+	local function ruleRow(name: string, y: number): TextLabel
+		local label = addText(healthPanel, name, UDim2.new(1, -16, 0, 18), UDim2.fromOffset(8, y), 12)
+		label.RichText = true
+		label.TextXAlignment = Enum.TextXAlignment.Center
+		label.TextScaled = true
+		label.TextWrapped = false
+		local textSizeLimit = Instance.new("UITextSizeConstraint")
+		textSizeLimit.MinTextSize = 8
+		textSizeLimit.MaxTextSize = 12
+		textSizeLimit.Parent = label
+		return label
+	end
+	local separator = '<font color="#AABAB2">  •  </font>'
+	local shelterRule = if isMobile then "ПРЯЧЬТЕСЬ ПОД КРЫШЕЙ" else "ПРЯЧЬТЕСЬ ПОД ОСТАНОВКАМИ"
+	local recoveryRules = ruleRow("ToxicRainRecoveryRules", 34)
+	local safetyRules = ruleRow("ToxicRainSafetyRules", 54)
+	safetyRules.Text = '<font color="#82FF91">'
+		.. (if isMobile then "ОБХОДИТЕ ЛУЖИ" else "НЕ НАСТУПАЙТЕ НА ЛУЖИ")
+		.. '</font>' .. separator .. '<font color="#9ED8FF">'
+		.. (if isMobile then "ПОБЕДА: СКОРОСТЬ + ЗДОРОВЬЕ" else "ДЛЯ ПОБЕДЫ ВАЖНЫ СКОРОСТЬ И ЗДОРОВЬЕ") .. '</font>'
 
-	local remaining = addText(host, "ToxicRainRemaining", UDim2.fromOffset(170, 28), if isMobile then UDim2.fromOffset(12, 116) else UDim2.fromOffset(12, 4), if isMobile then 11 else 13)
+	local remaining = addText(host, "ToxicRainRemaining", UDim2.fromOffset(170, 28), if isMobile then UDim2.fromOffset(12, 114) else UDim2.fromOffset(12, 4), if isMobile then 11 else 13)
 	remaining.BackgroundColor3 = Color3.fromRGB(12, 18, 18)
 	remaining.BackgroundTransparency = 0.18
 	remaining.TextXAlignment = Enum.TextXAlignment.Center
@@ -114,19 +118,29 @@ function Controller:Initialize()
 	local board = Instance.new("Frame")
 	board.Name = "ToxicRainRoundLeaderboard"
 	board.AnchorPoint = Vector2.new(1, 0)
-	board.Size = if isMobile then UDim2.new(0.38, -6, 0, 116) else UDim2.fromOffset(230, 108)
-	board.Position = if isMobile then UDim2.new(1, -10, 0, 116) else UDim2.new(1, -10, 0, -42)
+	board.Size = if isMobile then UDim2.new(0.55, -6, 0, 116) else UDim2.fromOffset(270, 112)
+	board.Position = if isMobile then UDim2.new(1, -10, 0, 114) else UDim2.new(1, -10, 0, -42)
 	board.BackgroundColor3 = Color3.fromRGB(10, 16, 15)
 	board.BackgroundTransparency = 0.1
 	board.Visible = false
 	board.Parent = host
 	addCorner(board, 10)
+	if not isMobile then
+		local function fitTopPanels()
+			-- Reserve the right corner for the leaderboard, with a gap to the centered HUD.
+			local centerWidth = math.min(660, math.max(1, host.AbsoluteSize.X - 580))
+			panelSizeLimit.MaxSize = Vector2.new(centerWidth, 76)
+			status.Size = UDim2.fromOffset(math.min(500, centerWidth), 30)
+		end
+		host:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitTopPanels)
+		fitTopPanels()
+	end
 	local boardTitle = addText(board, "Title", UDim2.new(1, -12, 0, 20), UDim2.fromOffset(6, 3), if isMobile then 11 else 13)
 	boardTitle.Text = "РЕЙТИНГ РАУНДА"
 	boardTitle.TextColor3 = Color3.fromRGB(135, 255, 105)
 	boardTitle.TextXAlignment = Enum.TextXAlignment.Center
 	local boardHeader = addText(board, "Header", UDim2.new(1, -12, 0, 16), UDim2.fromOffset(6, 23), if isMobile then 8 else 9)
-	boardHeader.Text = "ИГРОК  •  ВРЕМЯ  •  HP"
+	boardHeader.Text = "МЕСТО • ИГРОК • ВРЕМЯ • ЗДОРОВЬЕ • ОЧКИ"
 	boardHeader.TextColor3 = Color3.fromRGB(170, 185, 175)
 	local rowsScroll = Instance.new("ScrollingFrame")
 	rowsScroll.Name = "Rows"
@@ -144,8 +158,14 @@ function Controller:Initialize()
 	rowsLayout.Padding = UDim.new(0, 2)
 	rowsLayout.Parent = rowsScroll
 	local rows = {} :: { TextLabel }
-	for index = 1, 10 do
+	for index = 1, 16 do
 		local row = addText(rowsScroll, `Row{index}`, UDim2.new(1, -6, 0, 18), UDim2.fromOffset(0, 0), if isMobile then 9 else 10)
+		row.TextScaled = true
+		row.TextWrapped = false
+		local rowTextSizeLimit = Instance.new("UITextSizeConstraint")
+		rowTextSizeLimit.MinTextSize = 8
+		rowTextSizeLimit.MaxTextSize = if isMobile then 9 else 10
+		rowTextSizeLimit.Parent = row
 		row.Visible = false
 		rows[index] = row
 	end
@@ -174,16 +194,22 @@ function Controller:Initialize()
 			segmentFill.Visible = fillRatio > 0
 		end
 		healthTitle.Text = `ЗДОРОВЬЕ  {health}/100`
-		appleHint.Text = `ИЩИТЕ ЯБЛОКИ И ВОССТАНАВЛИВАЙТЕ ЗДОРОВЬЕ  •  🍎 {apples}`
+		local appleRule = if apples > 0
+			then if isMobile then `ЯБЛОКО ×{apples}: НАЖМИ НА НЕГО` else `ЯБЛОКО ×{apples}: НАЖМИ 2 ИЛИ КЛИК`
+			else if isMobile then "ЯБЛОКИ ЛЕЧАТ" else "ИЩИТЕ ЯБЛОКИ И ВОССТАНАВЛИВАЙТЕСЬ"
+		recoveryRules.Text = '<font color="#E2EBE6">' .. shelterRule .. '</font>'
+			.. separator .. '<font color="#FFD769">' .. appleRule .. '</font>'
 		healthPanel.Visible = state == "Running" or state == "Completed"
 		remaining.Text = `ОСТАЛОСЬ: {active}/{started}`
 		remaining.Visible = state == "Running" or state == "Completed"
 		status.Text = if result == "Won"
-			then "ПОБЕДА! ТЫ ПЕРВЫЙ НА ФИНИШЕ"
+			then "ПОБЕДА ПО ОЧКАМ! РАУНД ЗАВЕРШЁН"
+			elseif result == "Finished"
+			then if state == "Running" then "ТЫ ФИНИШИРОВАЛ! ОСТАЛЬНЫЕ ЕЩЁ БЕГУТ" else "РЕЗУЛЬТАТ СОХРАНЁН • РАУНД ЗАВЕРШЁН"
 			elseif result == "Lost"
-			then "РАУНД ЗАВЕРШЁН"
+			then if state == "Running" then "💀 ТЫ ПОГИБ • ОСТАЛЬНЫЕ ЕЩЁ БЕГУТ" else "💀 ТЫ ПОГИБ • РАУНД ЗАВЕРШЁН"
 			elseif state == "Waiting"
-			then `ВЫБЕРИ SOLO ИЛИ GROUP 2–10 • GROUP {ready}/{minimum}`
+			then `ВЫБЕРИ SOLO ИЛИ GROUP 2–16 • GROUP {ready}/{minimum}`
 			elseif state == "Countdown"
 			then `СТАРТ ЧЕРЕЗ: {countdown}`
 			elseif weather == "Warning"
@@ -192,32 +218,42 @@ function Controller:Initialize()
 			then `ВПЕРЁД К ФИНИШУ!  •  ☢ ДОЖДЬ ЗАКОНЧИТСЯ ЧЕРЕЗ {timer} С`
 			elseif state == "Running" and nextRainSeconds ~= nil
 			then `ВПЕРЁД К ФИНИШУ!  •  ☢ ДОЖДЬ НАЧНЁТСЯ ЧЕРЕЗ {nextRainSeconds} С`
+			elseif state == "Running" and self._workspace:GetAttribute("ToxicRainStormChasing") == true
+			then "☢ БУРЯ ДОГОНЯЕТ! БЕГИ К ФИНИШУ!"
 			elseif state == "Running"
 			then "ВПЕРЁД К ФИНИШУ!"
 			else ""
 		status.Visible = status.Text ~= ""
-		overlay.Visible = weather == "ToxicRain" and not isMobile
 
 		local participants = {}
+		local recorded = {}
+		local map = self._workspace:FindFirstChild("ToxicRainMap")
+		local podium = map and map:FindFirstChild("FinishPodiumRuntime")
+		local results = podium and podium:FindFirstChild("Results")
+		if results then
+			for _, record in results:GetChildren() do
+				local rank = record:GetAttribute("ToxicRainRank")
+				if typeof(rank) == "number" or record:GetAttribute("ToxicRainResult") == "Lost" then
+					recorded[tonumber(record.Name)] = true
+					table.insert(participants, {node = record, name = record:GetAttribute("DisplayName"), rank = if typeof(rank) == "number" then rank else math.huge})
+				end
+			end
+		end
 		for _, candidate in self._players:GetPlayers() do
-			if candidate:GetAttribute("ToxicRainQueueMode") == "Running" or candidate:GetAttribute("ToxicRainResult") ~= nil then
-				table.insert(participants, candidate)
+			if not recorded[candidate.UserId] and (candidate:GetAttribute("ToxicRainQueueMode") == "Running" or candidate:GetAttribute("ToxicRainResult") ~= nil) then
+				table.insert(participants, {node = candidate, name = candidate.DisplayName, rank = math.huge})
 			end
 		end
 		table.sort(participants, function(first, second)
-			local firstTime = first:GetAttribute("ToxicRainFinishTime")
-			local secondTime = second:GetAttribute("ToxicRainFinishTime")
-			local firstFinished = typeof(firstTime) == "number" and firstTime >= 0
-			local secondFinished = typeof(secondTime) == "number" and secondTime >= 0
-			if firstFinished ~= secondFinished then return firstFinished end
-			if firstFinished and secondFinished and firstTime ~= secondTime then return firstTime < secondTime end
-			return first.DisplayName < second.DisplayName
+			if first.rank ~= second.rank then return first.rank < second.rank end
+			return first.name < second.name
 		end)
 		board.Visible = #participants > 0 and (state == "Running" or state == "Completed")
 		local startedAt = self._workspace:GetAttribute("ToxicRainRoundStartedAt")
 		for index, row in rows do
-			local candidate = participants[index]
-			if candidate == nil then row.Visible = false continue end
+			local entry = participants[index]
+			if entry == nil then row.Visible = false continue end
+			local candidate = entry.node
 			local finishTime = candidate:GetAttribute("ToxicRainFinishTime")
 			local finishHealth = candidate:GetAttribute("ToxicRainFinishHealth")
 			local candidateHealth = candidate:GetAttribute("ToxicRainXP")
@@ -225,18 +261,24 @@ function Controller:Initialize()
 			local timeText = "—"
 			if typeof(finishTime) == "number" and finishTime >= 0 then
 				timeText = string.format("%.1fс", finishTime)
-			elseif state == "Running" and typeof(startedAt) == "number" then
+			elseif state == "Running" and typeof(startedAt) == "number" and candidate:GetAttribute("ToxicRainResult") == nil then
 				timeText = string.format("%.1fс", math.max(0, self._workspace:GetServerTimeNow() - startedAt))
 			end
-			local name = candidate.DisplayName
-			if #name > 13 then name = string.sub(name, 1, 12) .. "…" end
-			row.Text = string.format("%d. %s  •  %s  •  %d", index, name, timeText, math.clamp(math.round(shownHealth), 0, 100))
-			row.TextColor3 = if candidate:GetAttribute("ToxicRainResult") == "Won" then Color3.fromRGB(255, 225, 75) else Color3.fromRGB(238, 247, 239)
+			local score = candidate:GetAttribute("ToxicRainScore")
+			local lost = candidate:GetAttribute("ToxicRainResult") == "Lost"
+			local place = if lost then "💀" elseif entry.rank > 3 and entry.rank < math.huge then `👎{entry.rank}`
+				elseif entry.rank < math.huge then tostring(entry.rank) else "—"
+			local scoreText = if typeof(score) == "number" then tostring(score) else "—"
+			local shownTime = if lost then "погиб" else timeText
+			row.Text = string.format("%s. %s • %s • ❤️ %d • 🏆 %s", place, entry.name, shownTime, math.clamp(math.round(shownHealth), 0, 100), scoreText)
+			row.TextColor3 = if lost then Color3.fromRGB(255, 140, 155)
+				elseif entry.rank > 3 and entry.rank < math.huge then Color3.fromRGB(255, 205, 130)
+				elseif entry.rank == 1 then Color3.fromRGB(255, 225, 75) else Color3.fromRGB(238, 247, 239)
 			row.Visible = true
 		end
 	end
 
-	for _, name in { "ToxicRainRoundState", "ToxicRainCountdown", "ToxicRainReadyPlayers", "ToxicRainMinimumPlayers", "ToxicRainActivePlayers", "ToxicRainStartedPlayers", "ToxicRainWeather", "ToxicRainWeatherTimer", "ToxicRainRoundStartedAt", "ToxicRainNextRainAt", "ToxicRainRainEndsAt" } do
+	for _, name in { "ToxicRainRoundState", "ToxicRainCountdown", "ToxicRainReadyPlayers", "ToxicRainMinimumPlayers", "ToxicRainActivePlayers", "ToxicRainStartedPlayers", "ToxicRainWeather", "ToxicRainWeatherTimer", "ToxicRainRoundStartedAt", "ToxicRainNextRainAt", "ToxicRainRainEndsAt", "ToxicRainStormChasing" } do
 		self._workspace:GetAttributeChangedSignal(name):Connect(render)
 	end
 	for _, name in { "ToxicRainXP", "ToxicRainProtection", "ToxicRainResult", "ToxicRainAppleCount", "ToxicRainFinishTime", "ToxicRainFinishHealth" } do

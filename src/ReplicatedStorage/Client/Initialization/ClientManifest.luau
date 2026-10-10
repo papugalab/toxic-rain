@@ -31,6 +31,8 @@ local ToxicRainHudController = require(ReplicatedStorage.Project.Client.ToxicRai
 local ToxicRainPresentationController = require(ReplicatedStorage.Project.Client.ToxicRain.PresentationController)
 local ToxicRainWeatherController = require(ReplicatedStorage.Project.Client.ToxicRain.WeatherController)
 local ToxicRainShelterCombatController = require(ReplicatedStorage.Project.Client.ToxicRain.ShelterCombatController)
+local ToxicRainAppleController = require(ReplicatedStorage.Project.Client.ToxicRain.AppleController)
+local ToxicRainStudioNpcTestController = require(ReplicatedStorage.Project.Client.ToxicRain.StudioNpcTestController)
 
 local Commands = script.Parent.Commands
 local AssetRegistryInitializationCommand = require(Commands.AssetRegistryInitializationCommand)
@@ -53,6 +55,8 @@ local ToxicRainHudInitializationCommand = require(Commands.ToxicRainHudInitializ
 local ToxicRainPresentationInitializationCommand = require(Commands.ToxicRainPresentationInitializationCommand)
 local ToxicRainWeatherInitializationCommand = require(Commands.ToxicRainWeatherInitializationCommand)
 local ToxicRainShelterCombatInitializationCommand = require(Commands.ToxicRainShelterCombatInitializationCommand)
+local ToxicRainAppleInitializationCommand = require(Commands.ToxicRainAppleInitializationCommand)
+local ToxicRainStudioNpcTestInitializationCommand = require(Commands.ToxicRainStudioNpcTestInitializationCommand)
 
 local replicatedAssets = ReplicatedStorage:FindFirstChild("Assets")
 assert(replicatedAssets ~= nil and replicatedAssets:IsA("Folder"), "ReplicatedStorage.Assets must be a Folder")
@@ -135,8 +139,13 @@ local uiSystem = UiSystem.new({
 	Logger = Logger.new("UI.Client", "info"),
 })
 local toxicRainHud = ToxicRainHudController.new(uiSystem, Workspace, playersModule)
+local toxicRainApple = ToxicRainAppleController.new({
+	PlayersModule = playersModule,
+	Workspace = Workspace,
+	Communication = communication,
+})
 local toxicRainPresentation = ToxicRainPresentationController.new(uiSystem, Workspace, playersModule)
-local toxicRainWeather = ToxicRainWeatherController.new(uiSystem, Workspace, ordinarySound)
+local toxicRainWeather = ToxicRainWeatherController.new(uiSystem, Workspace, ordinarySound, playersModule)
 local toxicRainShelterCombat = ToxicRainShelterCombatController.new({
 	UI = uiSystem,
 	Workspace = Workspace,
@@ -144,6 +153,9 @@ local toxicRainShelterCombat = ToxicRainShelterCombatController.new({
 	Communication = communication,
 })
 local sharedRoot = ReplicatedStorage:FindFirstChild("Shared")
+local studioNpcTest = ToxicRainStudioNpcTestController.new({
+	PlayersModule = playersModule, UI = uiSystem, Workspace = Workspace, Communication = communication,
+})
 local configsRoot = if sharedRoot then sharedRoot:FindFirstChild("Configs") else nil
 local audioConfigRoot = if configsRoot then configsRoot:FindFirstChild("Audio") else nil
 
@@ -165,6 +177,7 @@ local services = {
 	AudioSettings = audioSettings,
 	UI = uiSystem,
 	ToxicRainShelterCombat = toxicRainShelterCombat,
+	ToxicRainStudioNpcTest = studioNpcTest,
 }
 
 return {
@@ -180,6 +193,7 @@ return {
 		ToxicRainHudInitializationCommand.new(toxicRainHud),
 		ToxicRainPresentationInitializationCommand.new(toxicRainPresentation),
 		CommunicationInitializationCommand.new(communication),
+		ToxicRainStudioNpcTestInitializationCommand.new(studioNpcTest),
 		ToxicRainShelterCombatInitializationCommand.new(toxicRainShelterCombat),
 		AudioGraphInitializationCommand.new(audioGraph),
 		OrdinarySoundInitializationCommand.new(ordinarySound, hybridAudio),
@@ -203,5 +217,6 @@ return {
 			Wallet = walletClient,
 			AudioSettings = audioSettings,
 		}),
+		ToxicRainAppleInitializationCommand.new(toxicRainApple),
 	},
 }

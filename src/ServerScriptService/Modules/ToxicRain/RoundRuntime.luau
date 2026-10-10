@@ -4,6 +4,8 @@ local RunService = game:GetService("RunService")
 
 local RoundConfig = require(script.Parent.RoundConfig)
 local RoundStateMachine = require(script.Parent.RoundStateMachine)
+local FinishPodiumRuntime = require(script.Parent.FinishPodiumRuntime)
+local AppleProtocol = require(game.ReplicatedStorage.Shared.ToxicRain.AppleProtocol)
 
 local RoundRuntime = {}
 RoundRuntime.__index = RoundRuntime
@@ -233,19 +235,27 @@ function RoundRuntime:_applyEnvironmentalTick(includeRain: boolean)
 		local nextXp = math.clamp(math.round(xp - loss), 0, 100)
 		player:SetAttribute("ToxicRainXP", nextXp)
 		if nextXp == 0 and player.Character then
-			self._round:Eliminate(player.UserId)
-			player:SetAttribute("ToxicRainFinishTime", -1)
-			player:SetAttribute("ToxicRainFinishHealth", 0)
-			player:SetAttribute("ToxicRainResult", "Lost")
-			player.Character:BreakJoints()
-			self:_publish()
-			if self._round:GetSnapshot().activeCount == 0 then self:_scheduleRestart() end
+			self:EliminatePlayer(player, true)
 		end
 	end
 end
 
 function RoundRuntime:_applyRainTick()
 	self:_applyEnvironmentalTick(true)
+end
+
+function RoundRuntime:_completeRainEvent(generation: number, eventIndex: number, scheduleStartedAt: number)
+	if generation ~= self._generation or self._round:GetSnapshot().state ~= "Running" then return end
+	self:_retireUsedShelters()
+	self._workspace:SetAttribute("ToxicRainWeather", "Clear")
+	self._workspace:SetAttribute("ToxicRainWeatherTimer", 0)
+	self._workspace:SetAttribute("ToxicRainRainEndsAt", nil)
+	local nextWarningStart = RoundConfig.RainWarningStartSeconds[eventIndex + 1]
+	self._workspace:SetAttribute("ToxicRainNextRainAt", if nextWarningStart then scheduleStartedAt + nextWarningStart + RoundConfig.RainWarningSeconds else nil)
+	if eventIndex == #RoundConfig.RainWarningStartSeconds then
+		self._stormChasing = true
+		self._workspace:SetAttribute("ToxicRainStormChasing", true)
+	end
 end
 
 function RoundRuntime:_runRainSchedule(generation: number)
@@ -257,6 +267,7 @@ function RoundRuntime:_runRainSchedule(generation: number)
 			task.wait(startSecond)
 			if generation ~= self._generation or self._round:GetSnapshot().state ~= "Running" then return end
 			for remaining = RoundConfig.RainWarningSeconds, 1, -1 do
+				if generation ~= self._generation or self._round:GetSnapshot().state ~= "Running" then return end
 				self._workspace:SetAttribute("ToxicRainWeather", "Warning")
 				self._workspace:SetAttribute("ToxicRainWeatherTimer", remaining)
 				task.wait(1)
@@ -271,45 +282,73 @@ function RoundRuntime:_runRainSchedule(generation: number)
 				self:_applyRainTick()
 				task.wait(1)
 			end
-			self:_retireUsedShelters()
-			self._workspace:SetAttribute("ToxicRainWeather", "Clear")
-			self._workspace:SetAttribute("ToxicRainWeatherTimer", 0)
-			self._workspace:SetAttribute("ToxicRainRainEndsAt", nil)
-			local nextWarningStart = RoundConfig.RainWarningStartSeconds[eventIndex + 1]
-			self._workspace:SetAttribute("ToxicRainNextRainAt", if nextWarningStart then scheduleStartedAt + nextWarningStart + RoundConfig.RainWarningSeconds else nil)
+			self:_completeRainEvent(generation, eventIndex, scheduleStartedAt)
 		end)
 	end
 end
 
+function RoundRuntime:ConsumeApple(player: Player, selectedTool: Tool?): boolean
+	local snapshot = self._round:GetSnapshot()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if snapshot.state ~= "Running" or snapshot.results[player.UserId] ~= "Active"
+		or not humanoid or humanoid.Health <= 0 or (player:GetAttribute("ToxicRainXP") or 0) <= 0 then return false end
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	local tool = selectedTool
+	if not tool then
+		for _, container in { character, backpack } do
+			if not container then continue end
+			for _, child in container:GetChildren() do
+				if child:IsA("Tool") and child:GetAttribute("ToxicRainApple") == true then tool = child break end
+			end
+			if tool then break end
+		end
+	end
+	if not tool or not tool.Parent or (tool.Parent ~= character and tool.Parent ~= backpack)
+		or tool:GetAttribute("ToxicRainApple") ~= true then return false end
+	-- Retire before changing health: duplicate mouse/keyboard intentions cannot
+	-- spend the same apple twice, and clients never supply healing values.
+	tool.Enabled = false
+	tool:Destroy()
+	player:SetAttribute("ToxicRainXP", 100)
+	player:SetAttribute("ToxicRainAppleCount", math.max(0, (player:GetAttribute("ToxicRainAppleCount") or 1) - 1))
+	return true
+end
+
 function RoundRuntime:_giveApple(player: Player, marker: BasePart)
-	if marker:GetAttribute("Taken") then return end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	local snapshot = self._round:GetSnapshot()
+	if marker:GetAttribute("Taken") or not backpack or not humanoid or humanoid.Health <= 0
+		or snapshot.state ~= "Running" or snapshot.results[player.UserId] ~= "Active" then return end
 	marker:SetAttribute("Taken", true)
 	marker.Transparency = 1
 	marker.CanTouch = false
 	local tool = Instance.new("Tool")
 	tool.Name = "Apple"
+	tool.ToolTip = "Нажми 2 или щёлкни мышью, чтобы восстановить здоровье"
 	tool:SetAttribute("ToxicRainApple", true)
 	tool.CanBeDropped = false
 	local handle = marker:Clone()
 	handle.Name = "Handle"
 	handle.Anchored = false
 	handle.CanCollide = false
+	handle.CanTouch = false
+	handle.CanQuery = true
+	handle.Massless = true
 	handle.Transparency = 0
 	handle.Parent = tool
 	local generation = self._generation
 	local activatedConnection = tool.Activated:Connect(function()
-		if generation ~= self._generation or self._round:GetSnapshot().state ~= "Running" then return end
-		if tool.Parent ~= player.Character and tool.Parent ~= player:FindFirstChildOfClass("Backpack") then return end
-		player:SetAttribute("ToxicRainXP", 100)
-		player:SetAttribute("ToxicRainAppleCount", math.max(0, (player:GetAttribute("ToxicRainAppleCount") or 1) - 1))
-		tool:Destroy()
+		if generation ~= self._generation then return end
+		self:ConsumeApple(player, tool)
 	end)
+	tool.Destroying:Once(function() activatedConnection:Disconnect() end)
 	table.insert(self._roundConnections, activatedConnection)
-	local backpack = player:FindFirstChildOfClass("Backpack")
-	if backpack then
-		tool.Parent = backpack
-		player:SetAttribute("ToxicRainAppleCount", (player:GetAttribute("ToxicRainAppleCount") or 0) + 1)
-	else tool:Destroy() end
+	tool.Parent = backpack
+	player:SetAttribute("ToxicRainAppleCount", (player:GetAttribute("ToxicRainAppleCount") or 0) + 1)
+	humanoid:EquipTool(tool)
 end
 
 function RoundRuntime:_clearRoundConnections()
@@ -319,6 +358,7 @@ end
 
 function RoundRuntime:_spawnApples()
 	self:_clearRoundConnections()
+	self:_clearGeneratedAppleSpawns()
 	local map = self._workspace:FindFirstChild("ToxicRainMap")
 	local folder = map and map:FindFirstChild("AppleSpawnPoints")
 	if not folder then return end
@@ -330,11 +370,37 @@ function RoundRuntime:_spawnApples()
 			if typeof(section) == "number" and bySection[section] then table.insert(bySection[section], child) end
 		end
 	end
-	local activePlayers = self._round:GetSnapshot().startedCount
-	local count = math.min(4, math.max(2, math.ceil(activePlayers * 0.5)))
-	local quotas = if count == 2 then {1,1,0} elseif count == 3 then {2,1,0} else {2,1,1}
+	local quotas = RoundConfig.GetAppleSpawnQuotas(self._round:GetSnapshot().startedCount)
 	for section, quota in quotas do
 		local candidates = bySection[section]
+		-- The authored course has nine markers. Expand only sections that need
+		-- more, by splitting their largest existing gap. No cap silently reduces
+		-- the budget of a large group and generated apples do not overlap.
+		while #candidates > 0 and #candidates < quota do
+			table.sort(candidates, function(a, b) return a.Position.Z < b.Position.Z end)
+			local position = candidates[1].Position + Vector3.new(6 * #candidates, 0, 0)
+			local largestGap = -math.huge
+			for index = 1, #candidates - 1 do
+				local gap = (candidates[index + 1].Position - candidates[index].Position).Magnitude
+				if gap > largestGap then
+					largestGap = gap
+					position = candidates[index].Position:Lerp(candidates[index + 1].Position, 0.5)
+				end
+			end
+			if not self._generatedAppleSpawns then
+				local generated = Instance.new("Folder")
+				generated.Name = "ExtraAppleSpawns"
+				generated.Parent = folder
+				self._generatedAppleSpawns = generated
+			end
+			local marker = candidates[1]:Clone()
+			marker.Name = `ExtraApple_{section}_{#candidates + 1}`
+			marker.CFrame = CFrame.new(position) * candidates[1].CFrame.Rotation
+			marker:SetAttribute("SectionIndex", section)
+			marker:SetAttribute("Taken", false)
+			marker.Parent = self._generatedAppleSpawns
+			table.insert(candidates, marker)
+		end
 		for _ = 1, quota do
 			if #candidates == 0 then break end
 			local marker = table.remove(candidates, math.random(1, #candidates))
@@ -348,6 +414,13 @@ function RoundRuntime:_spawnApples()
 			end)
 			table.insert(self._roundConnections, touchedConnection)
 		end
+	end
+end
+
+function RoundRuntime:_clearGeneratedAppleSpawns()
+	if self._generatedAppleSpawns then
+		self._generatedAppleSpawns:Destroy()
+		self._generatedAppleSpawns = nil
 	end
 end
 
@@ -508,7 +581,7 @@ function RoundRuntime:_spawnHazards(generation: number)
 		end
 		local bubbles = Instance.new("ParticleEmitter")
 		bubbles.Name = "BiohazardWarnings"
-		local isLargeWarning = (index + seed) % 10 == 0
+		local isLargeWarning = (index + seed) % 5 == 0
 		bubbles:SetAttribute("SizeVariant", if isLargeWarning then "Large" else "Small")
 		bubbles.Texture = RoundConfig.HazardParticleTexture
 		bubbles.Color = ColorSequence.new(Color3.fromRGB(80, 255, 75), Color3.fromRGB(20, 120, 35))
@@ -522,7 +595,7 @@ function RoundRuntime:_spawnHazards(generation: number)
 		bubbles.Shape = Enum.ParticleEmitterShape.Box
 		bubbles.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
 		bubbles.SpreadAngle = Vector2.new(55, 55)
-		local warningScale = if isLargeWarning then 1 else 0.5
+		local warningScale = if isLargeWarning then 1 else 0.25
 		bubbles.Size = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 0.9 * warningScale),
 			NumberSequenceKeypoint.new(0.55, 1.4 * warningScale),
@@ -575,10 +648,14 @@ function RoundRuntime:_spawnHazards(generation: number)
 	end
 end
 
-function RoundRuntime.new(playersModule: any, workspace: Workspace)
+function RoundRuntime.new(playersModule: any, workspace: Workspace, communication: any?, clock: (() -> number)?)
 	return setmetatable({
 		_players = playersModule,
 		_workspace = workspace,
+		_communication = communication,
+		_clock = clock or os.clock,
+		_podium = FinishPodiumRuntime.new(playersModule, workspace),
+		_stormChasing = false,
 		_round = RoundStateMachine.new(RoundConfig.GetMinimumPlayers(), RoundConfig.MaximumPlayers),
 		_generation = 0,
 		_disconnectPlayers = nil,
@@ -595,6 +672,7 @@ function RoundRuntime.new(playersModule: any, workspace: Workspace)
 		_runStartedAt = 0,
 		_restartScheduled = false,
 		_roundConnections = {} :: { RBXScriptConnection },
+		_generatedAppleSpawns = nil :: Folder?,
 		_lobbyConnections = {} :: { RBXScriptConnection },
 		_countdownRunning = false,
 		_furthestProgressByUserId = {} :: { [number]: number },
@@ -602,11 +680,13 @@ function RoundRuntime.new(playersModule: any, workspace: Workspace)
 		_shelterPartStates = {} :: { [BasePart]: any },
 		_shelterVisualStates = {} :: { [Instance]: any },
 		_startLocked = false,
+		_studioTestSuspended = false,
 		_startAnchoredRoots = {} :: { [number]: { Root: BasePart, WasAnchored: boolean } },
 	}, RoundRuntime)
 end
 
 function RoundRuntime:_queuePlayer(player: Player, mode: string)
+	if self._studioTestSuspended then return end
 	local snapshot = self._round:GetSnapshot()
 	if snapshot.state == "Running" or snapshot.state == "Completed" then return end
 	if mode == "Solo" then
@@ -728,7 +808,9 @@ function RoundRuntime:_createCourseBoundaries()
 end
 
 function RoundRuntime:_clearRoundObjects()
+	self._podium:Clear()
 	self:_clearRoundConnections()
+	self:_clearGeneratedAppleSpawns()
 	table.clear(self._furthestProgressByUserId)
 	self:_restoreShelters()
 	self:_clearHazards()
@@ -748,6 +830,9 @@ function RoundRuntime:_clearRoundObjects()
 		player:SetAttribute("ToxicRainResult", nil)
 		player:SetAttribute("ToxicRainFinishTime", nil)
 		player:SetAttribute("ToxicRainFinishHealth", nil)
+		player:SetAttribute("ToxicRainScore", nil)
+		player:SetAttribute("ToxicRainSpeedPoints", nil)
+		player:SetAttribute("ToxicRainRank", nil)
 		player:SetAttribute("ToxicRainAutoRun", false)
 		player:SetAttribute("ToxicRainProtection", "Open")
 		player:SetAttribute("ToxicRainAppleCount", 0)
@@ -763,6 +848,8 @@ function RoundRuntime:_clearRoundObjects()
 	if self._front then self._front:Destroy() self._front = nil end
 	if self._frontFlood then self._frontFlood:Destroy() self._frontFlood = nil end
 	self._frontZ = -45
+	self._stormChasing = false
+	self._workspace:SetAttribute("ToxicRainStormChasing", false)
 	self._workspace:SetAttribute("ToxicRainFrontZ", nil)
 end
 
@@ -807,6 +894,69 @@ function RoundRuntime:_publish()
 	self._workspace:SetAttribute("ToxicRainStartedPlayers", snapshot.startedCount)
 end
 
+function RoundRuntime:_completeRoundIfResolved()
+	local snapshot = self._round:GetSnapshot()
+	if snapshot.state ~= "Completed" or self._restartScheduled then return end
+	self._workspace:SetAttribute("ToxicRainWinnerUserId", snapshot.winnerPlayerId)
+	local map = self._workspace:FindFirstChild("ToxicRainMap")
+	local podium = map and map:FindFirstChild("FinishPodiumRuntime")
+	local results = podium and podium:FindFirstChild("Results")
+	local winnerRecord = results and snapshot.winnerPlayerId and results:FindFirstChild(tostring(snapshot.winnerPlayerId))
+	self._workspace:SetAttribute("ToxicRainWinnerName", winnerRecord and winnerRecord:GetAttribute("DisplayName") or nil)
+	for _, player in self._players:GetPlayers() do
+		if player.UserId == snapshot.winnerPlayerId then
+			player:SetAttribute("ToxicRainResult", "Won")
+			self._workspace:SetAttribute("ToxicRainWinnerName", player.DisplayName)
+		end
+	end
+	if self._front then self._front.Transparency = 1 end
+	if self._frontFlood then self._frontFlood.Transparency = 1 end
+	self._workspace:SetAttribute("ToxicRainWeather", "Clear")
+	self._workspace:SetAttribute("ToxicRainRainEndsAt", nil)
+	self._workspace:SetAttribute("ToxicRainNextRainAt", nil)
+	self:_publish()
+	self:_scheduleRestart()
+end
+
+function RoundRuntime:EliminatePlayer(player: Player, killCharacter: boolean?): boolean
+	if not self._round:Eliminate(player.UserId) then return false end
+	player:SetAttribute("ToxicRainXP", 0)
+	player:SetAttribute("ToxicRainResult", "Lost")
+	player:SetAttribute("ToxicRainFinishTime", -1)
+	player:SetAttribute("ToxicRainFinishHealth", 0)
+	player:SetAttribute("ToxicRainScore", nil)
+	player:SetAttribute("ToxicRainSpeedPoints", nil)
+	player:SetAttribute("ToxicRainRank", nil)
+	player:SetAttribute("ToxicRainAutoRun", false)
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if killCharacter and humanoid then humanoid.Health = 0 end
+	self._podium:PlaceEliminated(player)
+	self:_publish()
+	self:_completeRoundIfResolved()
+	return true
+end
+
+function RoundRuntime:TryFinish(player: Player): boolean
+	local snapshot = self._round:GetSnapshot()
+	if self._startLocked or snapshot.state ~= "Running" or snapshot.results[player.UserId] ~= "Active" then return false end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local map = self._workspace:FindFirstChild("ToxicRainMap")
+	local finish = map and map:FindFirstChild("FinishZone")
+	local health = player:GetAttribute("ToxicRainXP")
+	if not root or not root:IsA("BasePart") or not humanoid or humanoid.Health <= 0
+		or typeof(health) ~= "number" or health <= 0 or health > 100
+		or not finish or not finish:IsA("BasePart") or not containsHorizontal(finish, root.Position) then return false end
+	if not self._round:Finish(player.UserId, math.max(0, self._clock() - self._runStartedAt), health) then return false end
+	player:SetAttribute("ToxicRainResult", "Finished")
+	player:SetAttribute("ToxicRainHazard", "None")
+	self._podium:Update(self._round:GetStandings())
+	self:_publish()
+	self:_completeRoundIfResolved()
+	return true
+end
+
 function RoundRuntime:_releaseStartLock()
 	self._startLocked = false
 	self._workspace:SetAttribute("ToxicRainStartLocked", false)
@@ -825,7 +975,8 @@ function RoundRuntime:_initializeStartedPlayers()
 	assert(startingRoad ~= nil, "ToxicRain starting road is required")
 	local halfX, halfZ = worldHorizontalHalfExtents(startingRoad)
 	local roadStartZ = startingRoad.Position.Z - halfZ
-	local columnSpacing = math.min(6, math.max(3, (halfX * 2 - 6) / 4))
+	local playersPerRow = 8
+	local columnSpacing = math.min(6, (halfX * 2 - 6) / (playersPerRow - 1))
 	local spawnY = startingRoad.Position.Y + startingRoad.Size.Y * 0.5 + 3
 	for _, player in self._players:GetPlayers() do
 		if startedSnapshot.results[player.UserId] ~= "Active" then continue end
@@ -840,9 +991,9 @@ function RoundRuntime:_initializeStartedPlayers()
 		player:SetAttribute("ToxicRainQueueMode", "Running")
 		local character = player.Character
 		if character then
-			local rowIndex = math.floor((laneIndex - 1) / 5)
-			local columnIndex = (laneIndex - 1) % 5
-			local playersInRow = math.min(5, startedSnapshot.startedCount - rowIndex * 5)
+			local rowIndex = math.floor((laneIndex - 1) / playersPerRow)
+			local columnIndex = (laneIndex - 1) % playersPerRow
+			local playersInRow = math.min(playersPerRow, startedSnapshot.startedCount - rowIndex * playersPerRow)
 			local xOffset = (columnIndex - (playersInRow - 1) * 0.5) * columnSpacing
 			local position = Vector3.new(
 				startingRoad.Position.X + xOffset,
@@ -891,7 +1042,7 @@ function RoundRuntime:_beginCountdown(countdownSeconds: number, minimumPlayersOv
 			task.wait(0.5)
 			self:_releaseStartLock()
 			if generation ~= self._generation or self._round:GetSnapshot().state ~= "Running" then return end
-			self._runStartedAt = os.clock()
+			self._runStartedAt = self._clock()
 			self._workspace:SetAttribute("ToxicRainRoundStartedAt", self._workspace:GetServerTimeNow())
 			self:_spawnApples()
 			self:_spawnHazards(generation)
@@ -903,6 +1054,10 @@ function RoundRuntime:_beginCountdown(countdownSeconds: number, minimumPlayersOv
 end
 
 function RoundRuntime:Initialize()
+	assert(self._communication ~= nil, "ToxicRainRound requires Communication")
+	self._communication:RegisterHandler(AppleProtocol.ConsumeIntent, AppleProtocol.ValidateConsumeIntent, function(player)
+		self:ConsumeApple(player)
+	end)
 	self._disconnectPlayers = self._players:ObservePlayers(function(player)
 		player:SetAttribute("ToxicRainXP", nil)
 		player:SetAttribute("ToxicRainQueueMode", "None")
@@ -911,16 +1066,37 @@ function RoundRuntime:Initialize()
 		player:SetAttribute("ToxicRainFinishHealth", nil)
 		self:_publish()
 	end, function(player)
+		self._podium:RemovePlayer(player.UserId)
 		self._furthestProgressByUserId[player.UserId] = nil
 		self._baseWalkSpeedByUserId[player.UserId] = nil
 		local stateBefore = self._round:GetSnapshot().state
-		if stateBefore == "Running" then self._round:Eliminate(player.UserId) else self._round:SetReady(player.UserId, false) end
+		if stateBefore == "Running" then self._round:Leave(player.UserId) else self._round:SetReady(player.UserId, false) end
 		if stateBefore == "Countdown" and self._round:GetSnapshot().state == "Waiting" then
 			self._generation += 1
 			self._countdownRunning = false
 			self._workspace:SetAttribute("ToxicRainCountdown", 0)
 		end
 		self:_publish()
+		self:_completeRoundIfResolved()
+	end)
+	self._players.CharacterRemoving:Connect(function(player)
+		self:EliminatePlayer(player)
+	end)
+	self._players.CharacterAdded:Connect(function(player)
+		local result = player:GetAttribute("ToxicRainResult")
+		if result ~= "Lost" and result ~= "Finished" and result ~= "Won" then return end
+		local character = player.Character
+		local round = self._round
+		task.spawn(function()
+			if character then
+				character:WaitForChild("HumanoidRootPart", 5)
+				character:WaitForChild("Humanoid", 5)
+			end
+			if round == self._round and player.Character == character then
+				if player:GetAttribute("ToxicRainResult") == "Lost" then self._podium:PlaceEliminated(player)
+				else self._podium:Update(self._round:GetStandings()) end
+			end
+		end)
 	end)
 	local map = self._workspace:FindFirstChild("ToxicRainMap")
 	local startZone = map and map:FindFirstChild("StartZone")
@@ -932,6 +1108,7 @@ function RoundRuntime:Initialize()
 	self:_createCourseBoundaries()
 	self:_bindLobbyPads()
 	self._heartbeat = RunService.Heartbeat:Connect(function(deltaTime)
+		if self._studioTestSuspended then return end
 		local roundSnapshot = self._round:GetSnapshot()
 		local map = self._workspace:FindFirstChild("ToxicRainMap")
 		if map then self:_containNonParticipants(map) end
@@ -970,8 +1147,8 @@ function RoundRuntime:Initialize()
 			end
 		end
 		local frontZ = self._frontZ
-		if minimumPlayerZ < math.huge then
-			frontZ = RoundConfig.AdvanceStormFrontZ(frontZ, minimumPlayerZ, deltaTime)
+		if self._stormChasing or minimumPlayerZ < math.huge then
+			frontZ = RoundConfig.AdvanceStormFrontZ(frontZ, minimumPlayerZ, deltaTime, self._stormChasing)
 		end
 		self._frontZ = frontZ
 		self._front.CFrame = CFrame.new(0, 18, frontZ)
@@ -986,33 +1163,13 @@ function RoundRuntime:Initialize()
 			if roundSnapshot.results[player.UserId] ~= "Active" then continue end
 			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 			local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+			if humanoid and humanoid.Health <= 0 then
+				self:EliminatePlayer(player)
+				continue
+			end
 			if root and root:IsA("BasePart") then
 				local p = root.Position
-				local finish = map and map:FindFirstChild("FinishZone")
-				if finish and finish:IsA("BasePart") and containsHorizontal(finish, p) and self._round:Finish(player.UserId) then
-					self._generation += 1
-					local finishTime = math.max(0, os.clock() - self._runStartedAt)
-					local finishHealth = player:GetAttribute("ToxicRainXP")
-					player:SetAttribute("ToxicRainFinishTime", finishTime)
-					player:SetAttribute("ToxicRainFinishHealth", if typeof(finishHealth) == "number" then math.clamp(math.round(finishHealth), 0, 100) else 0)
-					self._workspace:SetAttribute("ToxicRainWinnerUserId", player.UserId)
-					self._workspace:SetAttribute("ToxicRainWinnerName", player.DisplayName)
-					if self._front then self._front.Transparency = 1 end
-					if self._frontFlood then self._frontFlood.Transparency = 1 end
-					player:SetAttribute("ToxicRainResult", "Won")
-					for _, other in self._players:GetPlayers() do
-						if other ~= player then
-							local otherHealth = other:GetAttribute("ToxicRainXP")
-							other:SetAttribute("ToxicRainFinishTime", -1)
-							other:SetAttribute("ToxicRainFinishHealth", if typeof(otherHealth) == "number" then math.clamp(math.round(otherHealth), 0, 100) else 0)
-							other:SetAttribute("ToxicRainResult", "Lost")
-							if other.Character then other.Character:BreakJoints() end
-						end
-					end
-					self:_publish()
-					self:_scheduleRestart()
-					break
-				end
+				if self:TryFinish(player) then continue end
 				local isOnRoad = if map then isPointOnRoad(map, p) else false
 				local isOnCentralRoad = if map then isPointOnCentralRoad(map, p) else false
 				player:SetAttribute("ToxicRainAutoRun", isOnCentralRoad)
@@ -1046,6 +1203,12 @@ function RoundRuntime:Initialize()
 	self._workspace:SetAttribute("ToxicRainRoundStartedAt", nil)
 	self._workspace:SetAttribute("ToxicRainNextRainAt", nil)
 	self._workspace:SetAttribute("ToxicRainRainEndsAt", nil)
+	self._workspace:SetAttribute("ToxicRainStormChasing", false)
+end
+
+function RoundRuntime:SetStudioTestSuspended(suspended: boolean)
+	assert(not suspended or RunService:IsStudio(), "NPC tests are Studio-only")
+	self._studioTestSuspended = suspended
 end
 
 return RoundRuntime

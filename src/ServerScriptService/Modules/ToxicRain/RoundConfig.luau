@@ -2,9 +2,12 @@
 
 local RoundConfig = {
 	ProductionMinimumPlayers = 2,
-	MaximumPlayers = 10,
+	MaximumPlayers = 16,
+	AppleSections = 3,
+	ApplesPerPlayer = 0.5,
+	MinimumRoundApples = 2,
 	CountdownSeconds = 10,
-	RoundEndPresentationSeconds = 3,
+	RoundEndPresentationSeconds = 10,
 	RoadSpeedStudsPerSecond = 32,
 	AutoRunMaximumGroundVerticalSpeed = 3,
 	RoadHalfWidthStuds = 17,
@@ -23,6 +26,9 @@ local RoundConfig = {
 	-- so toxic rain itself begins at seconds 13 and 31.
 	RainWarningStartSeconds = { 8, 26 },
 	StormFrontSpeedStudsPerSecond = 28,
+	StormFrontTrackingGapStuds = 120,
+	StormFrontCreepStudsPerSecond = 2,
+	StormFrontChaseStudsPerSecond = 18,
 	StormFrontMinimumPlayerGapStuds = 40,
 	StormFrontXpLossPerSecond = 18,
 	HazardXpLossPerSecond = 18,
@@ -30,6 +36,9 @@ local RoundConfig = {
 	HazardLaneCenters = { -47, -35, -23, -9, 4, 17, 30 },
 	HazardPuddlesPerBlockedLaneByBand = { 1, 2, 3, 4, 5 },
 	HazardParticleTexture = "rbxassetid://117777689607250",
+	-- The current first course uses green puddles only. Fountain hazards and
+	-- their yellow warning pools are reserved for a future second course.
+	FountainsEnabled = false,
 	FountainWarningSeconds = 1.5,
 	FountainActiveSeconds = 1.25,
 	FountainIdleSeconds = 2.5,
@@ -39,10 +48,35 @@ function RoundConfig.GetMinimumPlayers(): number
 	return RoundConfig.ProductionMinimumPlayers
 end
 
-function RoundConfig.AdvanceStormFrontZ(currentZ: number, laggingPlayerZ: number, deltaTime: number): number
-	local targetZ = laggingPlayerZ - RoundConfig.StormFrontMinimumPlayerGapStuds
-	if targetZ <= currentZ then return currentZ end
-	return math.min(targetZ, currentZ + RoundConfig.StormFrontSpeedStudsPerSecond * math.max(0, deltaTime))
+function RoundConfig.GetAppleSpawnQuotas(startedCount: number): { number }
+	local players = math.clamp(math.floor(startedCount), 0, RoundConfig.MaximumPlayers)
+	if players == 0 then return { 0, 0, 0 } end
+	-- Round the whole-course budget once so a fifth player adds one apple,
+	-- rather than independently rounding three sections and adding three.
+	local total = math.max(RoundConfig.MinimumRoundApples,
+		math.ceil(players * RoundConfig.ApplesPerPlayer))
+	local perSection = math.floor(total / RoundConfig.AppleSections)
+	local remainder = total % RoundConfig.AppleSections
+	local quotas = {}
+	for section = 1, RoundConfig.AppleSections do
+		quotas[section] = perSection + (if section <= remainder then 1 else 0)
+	end
+	return quotas
+end
+
+function RoundConfig.AdvanceStormFrontZ(currentZ: number, laggingPlayerZ: number, deltaTime: number, chasing: boolean?): number
+	local dt = math.max(0, deltaTime)
+	if chasing then
+		local finishZ = RoundConfig.CourseEndZ + RoundConfig.CourseBoundaryEndPaddingStuds
+		return math.max(currentZ, math.min(finishZ, currentZ + RoundConfig.StormFrontChaseStudsPerSecond * dt))
+	end
+	local safeLimitZ = laggingPlayerZ - RoundConfig.StormFrontMinimumPlayerGapStuds
+	local trackingZ = laggingPlayerZ - RoundConfig.StormFrontTrackingGapStuds
+	local catchUpZ = math.min(trackingZ, currentZ + RoundConfig.StormFrontSpeedStudsPerSecond * dt)
+	local creepZ = currentZ + RoundConfig.StormFrontCreepStudsPerSecond * dt
+	-- Catch up to runners, then slowly loom closer during shelter stops without
+	-- crossing the safety gap. Never retreat when a player runs backwards.
+	return math.max(currentZ, math.min(safeLimitZ, math.max(catchUpZ, creepZ)))
 end
 
 function RoundConfig.IsInsideHorizontalZone(localX: number, localZ: number, halfX: number, halfZ: number, margin: number): boolean
@@ -100,7 +134,7 @@ function RoundConfig.GenerateHazardLayout(seed: number, startZ: number, endZ: nu
 				})
 			end
 		end
-		if bandIndex >= 3 then
+		if RoundConfig.FountainsEnabled and bandIndex >= 3 then
 			local fountainLane = if safeLane == 1 then 3 elseif safeLane == 3 then 1 else (if random:NextNumber() < 0.5 then 1 else 3)
 			table.insert(fountains, {
 				X = RoundConfig.HazardLaneCenters[fountainLane] + random:NextNumber(-1, 1),

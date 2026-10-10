@@ -1,6 +1,8 @@
 --!strict
 
-export type Result = "Active" | "Won" | "Lost" | "Left"
+local FinishScoring = require(game.ReplicatedStorage.Shared.ToxicRain.FinishScoring)
+
+export type Result = "Active" | "Finished" | "Won" | "Lost" | "Left"
 
 local RoundStateMachine = {}
 RoundStateMachine.__index = RoundStateMachine
@@ -13,6 +15,7 @@ function RoundStateMachine.new(minPlayers: number, maxPlayers: number)
 		_state = "Waiting",
 		_ready = {} :: { [number]: boolean },
 		_results = {} :: { [number]: Result },
+		_finishes = {} :: { [number]: any },
 		_startedCount = 0,
 		_winnerPlayerId = nil :: number?,
 	}, RoundStateMachine)
@@ -42,21 +45,45 @@ function RoundStateMachine:Start(minimumPlayersOverride: number?): boolean
 	return true
 end
 
-function RoundStateMachine:Finish(playerId: number): boolean
-	if self._state ~= "Running" or self._results[playerId] ~= "Active" or self._winnerPlayerId ~= nil then return false end
-	self._winnerPlayerId = playerId
-	for participantId, result in self._results do
-		if result == "Active" then
-			self._results[participantId] = if participantId == playerId then "Won" else "Lost"
-		end
-	end
+function RoundStateMachine:GetStandings()
+	local standings = {}
+	for _, record in self._finishes do table.insert(standings, table.clone(record)) end
+	table.sort(standings, FinishScoring.Before)
+	for rank, record in standings do record.rank = rank end
+	return standings
+end
+
+function RoundStateMachine:_completeIfResolved()
+	for _, result in self._results do if result == "Active" then return end end
 	self._state = "Completed"
+	local first = self:GetStandings()[1]
+	if first then
+		self._winnerPlayerId = first.playerId
+		self._results[first.playerId] = "Won"
+	end
+end
+
+function RoundStateMachine:Finish(playerId: number, seconds: number?, health: number?): boolean
+	if self._state ~= "Running" or self._results[playerId] ~= "Active" then return false end
+	local record = FinishScoring.Calculate(seconds or 0, health or 100)
+	record.playerId = playerId
+	self._finishes[playerId] = record
+	self._results[playerId] = "Finished"
+	self:_completeIfResolved()
 	return true
 end
 
 function RoundStateMachine:Eliminate(playerId: number): boolean
 	if self._state ~= "Running" or self._results[playerId] ~= "Active" then return false end
 	self._results[playerId] = "Lost"
+	self:_completeIfResolved()
+	return true
+end
+
+function RoundStateMachine:Leave(playerId: number): boolean
+	if self._state ~= "Running" or self._results[playerId] ~= "Active" then return false end
+	self._results[playerId] = "Left"
+	self:_completeIfResolved()
 	return true
 end
 
@@ -66,7 +93,7 @@ function RoundStateMachine:GetSnapshot()
 	local results = {}
 	for playerId, result in self._results do
 		results[playerId] = result
-		if result == "Active" or result == "Won" then activeCount += 1 end
+		if result == "Active" then activeCount += 1 end
 	end
 	return {
 		state = self._state,
@@ -75,6 +102,7 @@ function RoundStateMachine:GetSnapshot()
 		activeCount = activeCount,
 		winnerPlayerId = self._winnerPlayerId,
 		results = results,
+		standings = self:GetStandings(),
 	}
 end
 

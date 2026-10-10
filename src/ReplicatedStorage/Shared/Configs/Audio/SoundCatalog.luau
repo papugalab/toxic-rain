@@ -7,7 +7,7 @@ return {
 		PlayerType = "SFX",
 		AssetId = "9041792228",
 		ResourcePath = "Shared/Sounds/Toxic Rain Victory Fanfare",
-		Volume01 = 0.5,
+		Volume01 = 0.03,
 		PlaybackSpeed = 1,
 		Looping = false,
 		Preload = true,

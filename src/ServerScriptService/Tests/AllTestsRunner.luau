@@ -26,6 +26,8 @@ local suites = {
 	{ Name = "ProductionIntegrationTestRunner", Runner = require(Tests.ProductionIntegrationTestRunner) },
 	{ Name = "ProductionReadinessTestRunner", Runner = require(Tests.ProductionReadinessTestRunner) },
 	{ Name = "ToxicRainRoundTestRunner", Runner = require(Tests.ToxicRainRoundTestRunner) },
+	{ Name = "FinishPodiumTestRunner", Runner = require(Tests.FinishPodiumTestRunner) },
+	{ Name = "StudioNpcTestRunner", Runner = require(Tests.StudioNpcTestRunner) },
 }
 
 local AllTestsRunner = {}
